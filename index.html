@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Live 实时双向语音交互客户端</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gemini: {
+                            50: '#f0f4ff',
+                            100: '#e0e9fe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            900: '#1e3a8a',
+                            purple: '#8b5cf6',
+                            cyan: '#06b6d4'
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                    },
+                    keyframes: {
+                        glow: {
+                            '0%': { boxShadow: '0 0 15px rgba(59, 130, 246, 0.4)' },
+                            '100%': { boxShadow: '0 0 30px rgba(139, 92, 246, 0.8)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-gemini-purple selection:text-white">
+
+    <!-- Top Header Bar -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur border-opacity-50 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-gemini-500 via-gemini-purple to-gemini-cyan flex items-center justify-center shadow-lg shadow-gemini-500/20">
+                    <i class="fa-solid font-bold text-white text-lg fa-bolt"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight bg-gradient-to-r from-blue-400 via-purple-300 to-cyan-300 bg-clip-text text-transparent">
+                        Gemini Live API Workbench
+                    </h1>
+                    <p class="text-xs text-slate-400">Gemini 3.8 Multimodal Live Session</p>
+                </div>
+            </div>
+
+            <!-- Connection Status Badge -->
+            <div class="flex items-center space-x-3">
+                <div id="statusBadge" class="flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs font-medium text-slate-300">
+                    <span id="statusDot" class="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+                    <span id="statusText">未连接</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Settings & Controls (4 Cols) -->
+        <section class="lg:col-span-4 flex flex-col space-y-5">
+            <!-- Connection & Settings Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-gemini-500"></i> 会话配置
+                </h2>
+
+                <!-- API Key Input -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Gemini API Key</label>
+                    <div class="relative">
+                        <input type="password" id="apiKeyInput" placeholder="AIzaSy..." 
+                            class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-gemini-500 transition pr-10">
+                        <button type="button" id="toggleKeyVisibility" class="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 text-xs">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-slate-500 mt-1">API Key 仅存储于本地浏览器内存。</p>
+                </div>
+
+                <!-- Model Selection -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Live 模型版本</label>
+                    <select id="modelSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-gemini-500 transition">
+                        <option value="gemini-3.8-live" selected>gemini-3.8-live (推荐：低延迟语音)</option>
+                        <option value="gemini-3.8-live-extended-thinking">gemini-3.8-live-extended-thinking (扩展思考推理)</option>
+                        <option value="gemini-3.1-flash-live-preview">gemini-3.1-flash-live-preview (旧版Preview)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                    </select>
+                </div>
+
+                <!-- Extended Thinking Settings Container -->
+                <div id="thinkingConfigContainer" class="hidden transition-all duration-300 border-l-2 border-gemini-purple pl-3 my-2 space-y-1">
+                    <label class="block text-xs font-medium text-gemini-purple mb-1">思考深度 (Thinking Level)</label>
+                    <select id="thinkingLevelSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-gemini-purple transition">
+                        <option value="low">Low (快速响应与基础推理)</option>
+                        <option value="medium" selected>Medium (标准深度推理)</option>
+                        <option value="high">High (复杂逻辑与高难度推理)</option>
+                    </select>
+                    <p class="text-[10px] text-slate-500">启用后台异步思考，适合解决多步骤复杂难题。</p>
+                </div>
+
+                <!-- Voice Selection -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Gemini 输出音色</label>
+                    <select id="voiceSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-gemini-500 transition">
+                        <option value="Puck" selected>Puck (活力男声)</option>
+                        <option value="Charon">Charon (沉稳男声)</option>
+                        <option value="Kore">Kore (温和女声)</option>
+                        <option value="Fenrir">Fenrir (热烈男声)</option>
+                        <option value="Aoede">Aoede (轻松女声)</option>
+                        <option value="Zephyr">Zephyr (明亮女声)</option>
+                    </select>
+                </div>
+
+                <!-- System Instruction -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">系统人设指令 (System Instruction)</label>
+                    <textarea id="systemInstructionInput" rows="3" 
+                        class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-200 focus:outline-none focus:border-gemini-500 transition resize-none"
+                        placeholder="例如：你是一个幽默、专业的AI助手...">你是一个反应敏捷、富有礼貌且回答简洁精炼的中文语音智能助手。</textarea>
+                </div>
+
+                <!-- Connect/Disconnect Toggle Button -->
+                <button id="connectBtn" class="w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 bg-gradient-to-r from-gemini-500 via-gemini-purple to-gemini-cyan text-white hover:opacity-95 shadow-lg shadow-gemini-500/25 active:scale-[0.98]">
+                    <i class="fa-solid fa-plug text-base"></i>
+                    <span id="connectBtnText">建立 Live 连接</span>
+                </button>
+            </div>
+
+            <!-- Media Stream Control Panel -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+                <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-video-camera text-gemini-purple"></i> 媒体交互开关
+                </h2>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- Mic Toggle -->
+                    <button id="toggleMicBtn" disabled class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:border-slate-700 transition disabled:opacity-50">
+                        <i id="micIcon" class="fa-solid fa-microphone text-lg mb-1 text-emerald-400"></i>
+                        <span id="micText" class="text-xs">麦克风已开启</span>
+                    </button>
+
+                    <!-- Camera Toggle -->
+                    <button id="toggleCamBtn" disabled class="p-3 bg-slate-950 border border-slate-800 rounded-xl flex flex-col items-center justify-center text-slate-400 hover:border-slate-700 transition disabled:opacity-50">
+                        <i id="camIcon" class="fa-solid fa-video-slash text-lg mb-1 text-slate-500"></i>
+                        <span id="camText" class="text-xs">摄像头已关闭</span>
+                    </button>
+                </div>
+
+                <!-- Video Preview Box -->
+                <div id="videoContainer" class="hidden relative aspect-video bg-black rounded-xl overflow-hidden border border-slate-800">
+                    <video id="webcamVideo" autoplay playsinline muted class="w-full h-full object-cover"></video>
+                    <canvas id="frameCanvas" class="hidden"></canvas>
+                    <div class="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur text-[10px] text-slate-300">
+                        <i class="fa-solid fa-sync fa-spin mr-1"></i> 实时推流 1 FPS
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Visualizer & Live Transcript (8 Cols) -->
+        <section class="lg:col-span-8 flex flex-col space-y-5">
+            <!-- Audio Waveform Visualizer Area -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col items-center justify-center min-h-[200px] relative overflow-hidden">
+                <!-- Glowing Orb Background -->
+                <div id="orbBg" class="absolute w-40 h-40 rounded-full bg-gradient-to-tr from-gemini-500/20 via-gemini-purple/20 to-gemini-cyan/20 blur-2xl transition-all duration-300 scale-90 opacity-40"></div>
+
+                <div class="z-10 text-center space-y-2 mb-4">
+                    <div id="aiVoicePill" class="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-slate-950 border border-slate-800 text-xs text-slate-300">
+                        <span id="aiPulseIndicator" class="w-2 h-2 rounded-full bg-slate-600"></span>
+                        <span id="aiStatusText">等待发起对话...</span>
+                    </div>
+                </div>
+
+                <!-- Visualizer Canvas -->
+                <div class="w-full max-w-md h-20 z-10">
+                    <canvas id="visualizerCanvas" class="w-full h-full"></canvas>
+                </div>
+            </div>
+
+            <!-- Realtime Transcript Box -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col min-h-[380px]">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+                    <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-comments text-gemini-cyan"></i> 实时双向对话转写
+                    </h2>
+                    <button id="clearChatBtn" class="text-xs text-slate-500 hover:text-slate-300 transition flex items-center gap-1">
+                        <i class="fa-solid fa-trash-can"></i> 清空记录
+                    </button>
+                </div>
+
+                <!-- Chat Feed Scroll Box -->
+                <div id="transcriptFeed" class="flex-1 overflow-y-auto space-y-3 pr-2 max-h-[420px]">
+                    <!-- Sample Initial Hint -->
+                    <div class="text-center py-10 text-slate-600 text-xs">
+                        <i class="fa-solid fa-microphone-lines text-2xl mb-2 block text-slate-700"></i>
+                        点击左侧 “建立 Live 连接” 按钮即可开始与 Gemini 3.8 进行全双工语音/视频对讲。
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- UI Notification Modal/Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 border border-slate-700 text-slate-100 text-xs px-4 py-3 rounded-xl shadow-2xl flex items-center space-x-2">
+        <i id="toastIcon" class="fa-solid fa-circle-info text-gemini-500"></i>
+        <span id="toastMsg">信息提示</span>
+    </div>
+
+    <!-- Main Application ESM Module -->
+    <script type="module">
+        import { GoogleGenAI } from 'https://esm.sh/@google/genai';
+
+        // Global Error Handling for UI feedback
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled Promise Rejection:', event.reason);
+            showToast('发生未知错误: ' + (event.reason?.message || event.reason), 'error');
+        });
+
+        // State Variables
+        let aiSession = null;
+        let inputAudioContext = null;
+        let outputAudioContext = null;
+        let micStream = null;
+        let cameraStream = null;
+        let videoInterval = null;
+        let nextStartTime = 0;
+        const activeAudioSources = new Set();
+        
+        let isConnected = false;
+        let isMicMuted = false;
+        let isCamActive = false;
+
+        // Visualizer State
+        let visualizerAnalyser = null;
+        let animFrameId = null;
+
+        // Current Transcript Buffers
+        let currentUserTranscriptEl = null;
+        let currentModelTranscriptEl = null;
+
+        // DOM Elements
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const modelSelect = document.getElementById('modelSelect');
+        const thinkingConfigContainer = document.getElementById('thinkingConfigContainer');
+        const thinkingLevelSelect = document.getElementById('thinkingLevelSelect');
+        const voiceSelect = document.getElementById('voiceSelect');
+        const systemInstructionInput = document.getElementById('systemInstructionInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const connectBtnText = document.getElementById('connectBtnText');
+        const toggleMicBtn = document.getElementById('toggleMicBtn');
+        const toggleCamBtn = document.getElementById('toggleCamBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const transcriptFeed = document.getElementById('transcriptFeed');
+        const webcamVideo = document.getElementById('webcamVideo');
+        const videoContainer = document.getElementById('videoContainer');
+        const frameCanvas = document.getElementById('frameCanvas');
+        const visualizerCanvas = document.getElementById('visualizerCanvas');
+        const orbBg = document.getElementById('orbBg');
+        const aiPulseIndicator = document.getElementById('aiPulseIndicator');
+        const aiStatusText = document.getElementById('aiStatusText');
+
+        // Toggle Thinking Config Panel based on Model selection
+        modelSelect.addEventListener('change', () => {
+            if (modelSelect.value.includes('extended-thinking')) {
+                thinkingConfigContainer.classList.remove('hidden');
+            } else {
+                thinkingConfigContainer.classList.add('hidden');
+            }
+        });
+
+        const workletCode = `
+        class RecorderProcessor extends AudioWorkletProcessor {
+            process(inputs, outputs, parameters) {
+                const input = inputs[0];
+                if (input && input.length > 0) {
+                    this.port.postMessage(input[0]);
+                }
+                return true;
+            }
+        }
+        registerProcessor('recorder-processor', RecorderProcessor);
+        `;
+
+        // Utility: Show Toast Message
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMsg.textContent = message;
+            if (type === 'error') {
+                toastIcon.className = 'fa-solid fa-circle-exclamation text-rose-500';
+            } else if (type === 'success') {
+                toastIcon.className = 'fa-solid fa-circle-check text-emerald-500';
+            } else {
+                toastIcon.className = 'fa-solid fa-circle-info text-gemini-500';
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        // Convert Float32Array to PCM 16Bit Base64 String
+        function createPcmBlob(data) {
+            const l = data.length;
+            const int16 = new Int16Array(l);
+            for (let i = 0; i < l; i++) {
+                const s = Math.max(-1, Math.min(1, data[i]));
+                int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            let binary = '';
+            const bytes = new Uint8Array(int16.buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return {
+                data: btoa(binary),
+                mimeType: 'audio/pcm;rate=16000'
+            };
+        }
+
+        // Decode 24kHz Int16 PCM Audio from Gemini Live to Web Audio Buffer
+        function decodeBase64Pcm(base64Str, ctx, sampleRate = 24000) {
+            const binaryString = atob(base64Str);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const dataInt16 = new Int16Array(bytes.buffer);
+            const buffer = ctx.createBuffer(1, dataInt16.length, sampleRate);
+            const channelData = buffer.getChannelData(0);
+            for (let i = 0; i < dataInt16.length; i++) {
+                channelData[i] = dataInt16[i] / 32768.0;
+            }
+            return buffer;
+        }
+
+        // Play Output Audio Chunk with Smooth Time Cursor Scheduling
+        async function playAudioChunk(base64Audio) {
+            if (!outputAudioContext || outputAudioContext.state === 'closed') return;
+            if (outputAudioContext.state === 'suspended') {
+                await outputAudioContext.resume();
+            }
+
+            setAiState('speaking');
+
+            nextStartTime = Math.max(nextStartTime, outputAudioContext.currentTime);
+            const audioBuffer = decodeBase64Pcm(base64Audio, outputAudioContext, 24000);
+            const source = outputAudioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(outputAudioContext.destination);
+
+            source.addEventListener('ended', () => {
+                activeAudioSources.delete(source);
+                if (activeAudioSources.size === 0 && isConnected) {
+                    setAiState('listening');
+                }
+            });
+
+            source.start(nextStartTime);
+            nextStartTime += audioBuffer.duration;
+            activeAudioSources.add(source);
+        }
+
+        // Interrupt Current Model Output Audio
+        function interruptPlayback() {
+            for (const src of activeAudioSources) {
+                try { src.stop(); } catch(e){}
+            }
+            activeAudioSources.clear();
+            nextStartTime = 0;
+            if (isConnected) setAiState('listening');
+        }
+
+        function setAiState(state) {
+            if (state === 'speaking') {
+                aiPulseIndicator.className = 'w-2 h-2 rounded-full bg-gemini-cyan animate-ping';
+                aiStatusText.textContent = 'Gemini 正在说话...';
+                orbBg.className = 'absolute w-44 h-44 rounded-full bg-gradient-to-tr from-gemini-500 via-gemini-purple to-gemini-cyan blur-2xl transition-all duration-300 scale-125 opacity-80 animate-pulse';
+            } else if (state === 'thinking') {
+                aiPulseIndicator.className = 'w-2 h-2 rounded-full bg-gemini-purple animate-pulse';
+                aiStatusText.textContent = 'Gemini 正在深度思考推理中...';
+                orbBg.className = 'absolute w-40 h-40 rounded-full bg-gradient-to-tr from-gemini-purple via-gemini-500 to-indigo-600 blur-2xl transition-all duration-300 scale-110 opacity-70';
+            } else if (state === 'listening') {
+                aiPulseIndicator.className = 'w-2 h-2 rounded-full bg-emerald-400';
+                aiStatusText.textContent = 'Gemini 正在倾听中...';
+                orbBg.className = 'absolute w-40 h-40 rounded-full bg-gradient-to-tr from-gemini-500/20 via-gemini-purple/20 to-gemini-cyan/20 blur-2xl transition-all duration-300 scale-100 opacity-40';
+            } else {
+                aiPulseIndicator.className = 'w-2 h-2 rounded-full bg-slate-600';
+                aiStatusText.textContent = '未连接对话';
+                orbBg.className = 'absolute w-40 h-40 rounded-full bg-slate-800/20 blur-2xl opacity-20';
+            }
+        }
+
+        function updateConnectionUI(connected, connecting = false) {
+            isConnected = connected;
+            if (connecting) {
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse';
+                statusText.textContent = '建立连接中...';
+                connectBtnText.textContent = '正在连接...';
+                connectBtn.disabled = true;
+            } else if (connected) {
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+                statusText.textContent = 'Live 会话已激活';
+                connectBtnText.textContent = '断开 Live 连接';
+                connectBtn.className = 'w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/25 active:scale-[0.98]';
+                connectBtn.disabled = false;
+                toggleMicBtn.disabled = false;
+                toggleCamBtn.disabled = false;
+                setAiState('listening');
+            } else {
+                statusDot.className = 'w-2.5 h-2.5 rounded-full bg-slate-500';
+                statusText.textContent = '未连接';
+                connectBtnText.textContent = '建立 Live 连接';
+                connectBtn.className = 'w-full py-3 px-4 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 bg-gradient-to-r from-gemini-500 via-gemini-purple to-gemini-cyan text-white hover:opacity-95 shadow-lg shadow-gemini-500/25 active:scale-[0.98]';
+                connectBtn.disabled = false;
+                toggleMicBtn.disabled = true;
+                toggleCamBtn.disabled = true;
+                setAiState('idle');
+            }
+        }
+
+        function appendTranscript(role, text) {
+            if (!text) return;
+            if (transcriptFeed.children.length === 1 && transcriptFeed.children[0].classList.contains('text-center')) {
+                transcriptFeed.innerHTML = '';
+            }
+
+            if (role === 'user') {
+                if (!currentUserTranscriptEl) {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'flex items-start space-x-3 justify-end';
+                    wrap.innerHTML = `
+                        <div class="bg-gemini-600/20 border border-gemini-500/30 text-slate-100 px-4 py-2.5 rounded-2xl rounded-tr-none text-xs max-w-[85%] leading-relaxed space-y-1">
+                            <div class="font-semibold text-[10px] text-gemini-500 uppercase tracking-wider">你</div>
+                            <div class="content-body"></div>
+                        </div>
+                        <div class="w-7 h-7 rounded-lg bg-gemini-600 flex items-center justify-center text-xs text-white shrink-0">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                    `;
+                    transcriptFeed.appendChild(wrap);
+                    currentUserTranscriptEl = wrap.querySelector('.content-body');
+                }
+                currentUserTranscriptEl.textContent += text;
+                currentModelTranscriptEl = null; // Clear model buffer ref
+            } else {
+                if (!currentModelTranscriptEl) {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'flex items-start space-x-3';
+                    wrap.innerHTML = `
+                        <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-gemini-500 to-gemini-purple flex items-center justify-center text-xs text-white shrink-0">
+                            <i class="fa-solid fa-sparkles"></i>
+                        </div>
+                        <div class="bg-slate-800/80 border border-slate-700/60 text-slate-100 px-4 py-2.5 rounded-2xl rounded-tl-none text-xs max-w-[85%] leading-relaxed space-y-1">
+                            <div class="font-semibold text-[10px] text-gemini-cyan uppercase tracking-wider">Gemini</div>
+                            <div class="content-body"></div>
+                        </div>
+                    `;
+                    transcriptFeed.appendChild(wrap);
+                    currentModelTranscriptEl = wrap.querySelector('.content-body');
+                }
+                currentModelTranscriptEl.textContent += text;
+                currentUserTranscriptEl = null; // Clear user buffer ref
+            }
+
+            transcriptFeed.scrollTop = transcriptFeed.scrollHeight;
+        }
+
+        async function startLiveSession() {
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                showToast('请填入有效的 Gemini API Key！', 'error');
+                return;
+            }
+
+            updateConnectionUI(false, true);
+
+            try {
+                // Initialize GenAI client instance
+                const ai = new GoogleGenAI({ apiKey });
+
+                // Audio Contexts Setup
+                inputAudioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                outputAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                await inputAudioContext.resume();
+                await outputAudioContext.resume();
+
+                // Worklet module setup
+                const workletBlob = new Blob([workletCode], { type: 'application/javascript' });
+                const workletUrl = URL.createObjectURL(workletBlob);
+                await inputAudioContext.audioWorklet.addModule(workletUrl);
+
+                // Get User Microphone
+                micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    }
+                });
+
+                // Reset audio scheduling timestamp and reuse input audio context for visualizer
+                nextStartTime = 0;
+                setupVisualizer(micStream, inputAudioContext);
+
+                const selectedModel = modelSelect.value || 'gemini-3.8-live';
+                const systemPromptText = systemInstructionInput.value.trim();
+
+                // Build live session configuration
+                const liveConfig = {
+                    responseModalities: ['audio'],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: voiceSelect.value }
+                        }
+                    },
+                    systemInstruction: {
+                        parts: [{ text: systemPromptText }]
+                    },
+                    inputAudioTranscription: {},
+                    outputAudioTranscription: {},
+                };
+
+                // Attach thinkingConfig for extended thinking model
+                if (selectedModel.includes('extended-thinking')) {
+                    liveConfig.thinkingConfig = {
+                        thinkingLevel: thinkingLevelSelect.value || 'medium'
+                    };
+                }
+
+                // Establish Live Connection
+                const sessionPromise = ai.live.connect({
+                    model: selectedModel,
+                    callbacks: {
+                        onopen: () => {
+                            console.log('Gemini Live session opened with model:', selectedModel);
+                            updateConnectionUI(true);
+                            showToast(`成功连接至 ${selectedModel}`, 'success');
+
+                            // Connect mic stream to audio worklet
+                            const source = inputAudioContext.createMediaStreamSource(micStream);
+                            const recorder = new AudioWorkletNode(inputAudioContext, 'recorder-processor');
+
+                            recorder.port.onmessage = (e) => {
+                                if (isMicMuted) return;
+                                const pcmBlob = createPcmBlob(e.data);
+                                sessionPromise.then((session) => {
+                                    session.sendRealtimeInput({ audio: pcmBlob });
+                                });
+                            };
+
+                            source.connect(recorder);
+                        },
+                        onmessage: async (message) => {
+                            // Check async interaction status for reasoning state
+                            if (message.serverContent?.interactionStatus === 'IN_PROGRESS' && activeAudioSources.size === 0) {
+                                setAiState('thinking');
+                            }
+
+                            // 1. Transcription text
+                            if (message.serverContent?.outputTranscription) {
+                                appendTranscript('model', message.serverContent.outputTranscription.text);
+                            }
+                            if (message.serverContent?.inputTranscription) {
+                                appendTranscript('user', message.serverContent.inputTranscription.text);
+                            }
+
+                            // 2. Multi-part model turn handling (Text + Audio)
+                            if (message.serverContent?.modelTurn?.parts) {
+                                for (const part of message.serverContent.modelTurn.parts) {
+                                    if (part.text) {
+                                        appendTranscript('model', part.text);
+                                    }
+                                    if (part.inlineData?.data) {
+                                        playAudioChunk(part.inlineData.data);
+                                    }
+                                }
+                            }
+
+                            // 3. User Interrupt (Barge-in)
+                            if (message.serverContent?.interrupted) {
+                                console.log('Barge-in detected! Stopping model output audio.');
+                                interruptPlayback();
+                            }
+
+                            // Reset transcript turn complete references
+                            if (message.serverContent?.turnComplete) {
+                                currentUserTranscriptEl = null;
+                                currentModelTranscriptEl = null;
+                            }
+                        },
+                        onerror: (err) => {
+                            console.error('Gemini Live Error:', err);
+                            showToast('会话发生错误: ' + (err.message || '连接错误'), 'error');
+                            stopLiveSession();
+                        },
+                        onclose: () => {
+                            console.log('Gemini Live closed.');
+                            stopLiveSession();
+                        }
+                    },
+                    config: liveConfig
+                });
+
+                aiSession = sessionPromise;
+
+            } catch (err) {
+                console.error('Failed to start Live session:', err);
+                showToast('连接失败: ' + err.message, 'error');
+                stopLiveSession();
+            }
+        }
+
+        function stopLiveSession() {
+            if (aiSession) {
+                aiSession.then(session => {
+                    try { session.close(); } catch(e){}
+                });
+                aiSession = null;
+            }
+
+            if (micStream) {
+                micStream.getTracks().forEach(t => t.stop());
+                micStream = null;
+            }
+
+            if (cameraStream) {
+                stopCamera();
+            }
+
+            if (inputAudioContext) {
+                try { inputAudioContext.close(); } catch(e){}
+                inputAudioContext = null;
+            }
+
+            if (outputAudioContext) {
+                try { outputAudioContext.close(); } catch(e){}
+                outputAudioContext = null;
+            }
+
+            if (animFrameId) {
+                cancelAnimationFrame(animFrameId);
+                animFrameId = null;
+            }
+
+            interruptPlayback();
+            nextStartTime = 0;
+            updateConnectionUI(false);
+            currentUserTranscriptEl = null;
+            currentModelTranscriptEl = null;
+        }
+
+        async function startCamera() {
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+                webcamVideo.srcObject = cameraStream;
+                videoContainer.classList.remove('hidden');
+                isCamActive = true;
+
+                toggleCamBtn.querySelector('i').className = 'fa-solid fa-video text-lg mb-1 text-gemini-cyan';
+                toggleCamBtn.querySelector('span').textContent = '摄像头已开启';
+
+                // Send camera JPEG frames at 1 FPS
+                const ctx = frameCanvas.getContext('2d');
+                videoInterval = setInterval(() => {
+                    if (!aiSession || !isCamActive) return;
+
+                    frameCanvas.width = webcamVideo.videoWidth || 320;
+                    frameCanvas.height = webcamVideo.videoHeight || 240;
+                    ctx.drawImage(webcamVideo, 0, 0, frameCanvas.width, frameCanvas.height);
+
+                    frameCanvas.toBlob(async (blob) => {
+                        if (blob) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                const base64Data = reader.result.split(',')[1];
+                                aiSession.then((session) => {
+                                    session.sendRealtimeInput({
+                                        video: { data: base64Data, mimeType: 'image/jpeg' }
+                                    });
+                                });
+                            };
+                            reader.readAsDataURL(blob);
+                        }
+                    }, 'image/jpeg', 0.6);
+                }, 1000);
+
+            } catch (err) {
+                showToast('无法启动摄像头: ' + err.message, 'error');
+            }
+        }
+
+        function stopCamera() {
+            if (videoInterval) {
+                clearInterval(videoInterval);
+                videoInterval = null;
+            }
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(t => t.stop());
+                cameraStream = null;
+            }
+            webcamVideo.srcObject = null;
+            videoContainer.classList.add('hidden');
+            isCamActive = false;
+
+            toggleCamBtn.querySelector('i').className = 'fa-solid fa-video-slash text-lg mb-1 text-slate-500';
+            toggleCamBtn.querySelector('span').textContent = '摄像头已关闭';
+        }
+        function setupVisualizer(stream, audioCtx) {
+            if (!audioCtx) return;
+            const ctx = visualizerCanvas.getContext('2d');
+            const source = audioCtx.createMediaStreamSource(stream);
+            visualizerAnalyser = audioCtx.createAnalyser();
+            visualizerAnalyser.fftSize = 64;
+            source.connect(visualizerAnalyser);
+
+            const bufferLength = visualizerAnalyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function draw() {
+                if (!inputAudioContext) return;
+                animFrameId = requestAnimationFrame(draw);
+                visualizerAnalyser.getByteFrequencyData(dataArray);
+
+                ctx.clearRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+
+                const width = visualizerCanvas.width;
+                const height = visualizerCanvas.height;
+                const barWidth = (width / bufferLength) * 1.5;
+                let x = (width - (bufferLength * barWidth)) / 2;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const barHeight = (dataArray[i] / 255) * height;
+                    const bWidth = Math.max(0, barWidth - 2);
+                    const bHeight = Math.max(0, barHeight);
+
+                    const gradient = ctx.createLinearGradient(0, height, 0, 0);
+                    gradient.addColorStop(0, '#3b82f6');
+                    gradient.addColorStop(0.5, '#8b5cf6');
+                    gradient.addColorStop(1, '#06b6d4');
+
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x, height - bHeight, bWidth, bHeight);
+
+                    x += barWidth;
+                }
+            }
+            draw();
+        }
+
+        // API Key Visibility Toggle
+        document.getElementById('toggleKeyVisibility').addEventListener('click', () => {
+            const icon = document.querySelector('#toggleKeyVisibility i');
+            if (apiKeyInput.type === 'password') {
+                apiKeyInput.type = 'text';
+                icon.className = 'fa-solid fa-eye-slash';
+            } else {
+                apiKeyInput.type = 'password';
+                icon.className = 'fa-solid fa-eye';
+            }
+        });
+
+        // Connect Button Toggle
+        connectBtn.addEventListener('click', () => {
+            if (isConnected) {
+                stopLiveSession();
+                showToast('已断开 Gemini Live 会话', 'info');
+            } else {
+                startLiveSession();
+            }
+        });
+
+        // Microphone Mute Toggle
+        toggleMicBtn.addEventListener('click', () => {
+            isMicMuted = !isMicMuted;
+            const micIcon = document.getElementById('micIcon');
+            const micText = document.getElementById('micText');
+            if (isMicMuted) {
+                micIcon.className = 'fa-solid fa-microphone-slash text-lg mb-1 text-rose-500';
+                micText.textContent = '麦克风已静音';
+            } else {
+                micIcon.className = 'fa-solid fa-microphone text-lg mb-1 text-emerald-400';
+                micText.textContent = '麦克风已开启';
+            }
+        });
+
+        // Camera Toggle
+        toggleCamBtn.addEventListener('click', () => {
+            if (isCamActive) {
+                stopCamera();
+            } else {
+                startCamera();
+            }
+        });
+
+        // Clear Transcripts
+        document.getElementById('clearChatBtn').addEventListener('click', () => {
+            transcriptFeed.innerHTML = `
+                <div class="text-center py-10 text-slate-600 text-xs">
+                    <i class="fa-solid fa-microphone-lines text-2xl mb-2 block text-slate-700"></i>
+                    对话记录已清空，请继续说话。
+                </div>
+            `;
+            currentUserTranscriptEl = null;
+            currentModelTranscriptEl = null;
+        });
+
+        // Canvas sizing initialization
+        function resizeCanvas() {
+            visualizerCanvas.width = visualizerCanvas.offsetWidth;
+            visualizerCanvas.height = visualizerCanvas.offsetHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+    </script>
+</body>
+</html>
